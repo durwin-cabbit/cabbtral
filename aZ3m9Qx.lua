@@ -265,21 +265,7 @@ do
     cabbtral.last_update = "07.11.2025"
 end
 
-local current_build = "source"
-do
-    local builds = {
-        ["cabbtral.project"] = { "stable", 1 },
-        ["cabbtral recode"] = { "recode", 2 },
-        ["cabbtral beta"] = { "beta", 3 },
-    }
-
-    local build_table = builds[_SCRIPT_NAME]
-    if build_table == nil then
-        current_build = "source"
-    else
-        current_build = builds[1]
-    end
-end
+local current_build = "beta"
 
 pui.macros.p = "\aCDCDCD40•\r"
 pui.macros.accent = "\ad1d1d1ff"
@@ -2451,9 +2437,16 @@ end)
 
 local ts = {}
 do
-    menu.label(groups.antiaim)(("\v%s pre-release\r \aFFAE99FF[%s]"):format(cabbtral.name, current_build))(
+    menu.label(groups.antiaim)(("\v%s\r \aFFAE99FF[%s]"):format(cabbtral.name, current_build))(
         "main",
         "info_header"
+    )
+
+        menu.label(groups.antiaim)("\226\128\142")("main", "blank69420")
+
+    menu.label(groups.antiaim)("Test build by \vreset\r")(
+        "main",
+        "info_header1"
     )
 
     menu.label(groups.antiaim)("\226\128\142")("main", "blank4167")
@@ -3218,8 +3211,10 @@ end)()
 
 
 events.predict_command:set(function()
-    if menu.elements["main"]["debug"] and DEBUG then 
-        print_raw("invalidating ticks: ".. exploit.diff .."")
+    if menu.elements["main"]["debug"] and DEBUG then
+        if exploit.defensive then
+            print_raw("invalidating ticks: ".. exploit.diff .."")
+        end
     end
 end)
 
@@ -5936,7 +5931,7 @@ do
             end,
 
             paint = function(self, position, flags, fn)
-                local text = fn("HS")
+                local text = not refs.other.doubletap.hotkey:get() and exploit.defensive and fn("HS \a0096FFFFDEFENSIVE\r") or not refs.other.doubletap.hotkey:get() and fn("HS \a00FF55FFACTIVE\r") or refs.other.doubletap.hotkey:get() and fn("HS")
                 local size = render.measure_text(flags, text)
 
                 local multiplier = anim.new(
