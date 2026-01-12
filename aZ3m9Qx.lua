@@ -5524,6 +5524,84 @@ end
         end)
     end
 
+local autobuy = {}
+do
+    autobuy.buy = {}
+    do
+        local buy = autobuy.buy
+        local bought_this_round = false
+        
+        client.set_event_callback("round_start", function()
+            bought_this_round = false
+        end)
+        
+        local primary_opts = { "-", "AWP", "Auto-Sniper", "Scout", "Negev" }
+        local secondary_opts = { "-", "R8 Revolver / Deagle", "Dual Berettas", "FN57 / Tec9 / CZ75-Auto" }
+        local gear_opts = { "Kevlar", "Helmet", "Defuse Kit", "Grenade", "Molotov", "Smoke", "Taser" }
+        
+        buy.handle = function(e)
+            local userid = e.userid
+            if userid ~= nil then
+                if client.userid_to_entindex(userid) ~= entity.get_local_player() then
+                    return
+                end
+            end
+            
+            if bought_this_round then return end
+            if not menu.elements["visuals"]["autobuy"] then return end
+            
+            bought_this_round = true
+            
+            local cmds = {}
+            local main = menu.elements["visuals"]["primary"]
+            local sec = menu.elements["visuals"]["secondary"]
+            local utility = menu.elements["visuals"]["utility"]
+            
+            if main ~= "-" then
+                if main == "AWP" then
+                    table.insert(cmds, "buy awp")
+                elseif main == "Auto-Sniper" then
+                    table.insert(cmds, "buy scar20; buy g3sg1")
+                elseif main == "Scout" then
+                    table.insert(cmds, "buy ssg08")
+                elseif main == "Negev" then
+                    table.insert(cmds, "buy negev")
+                end
+            end
+            
+            if sec ~= "-" then
+                if sec == "R8 Revolver / Deagle" then
+                    table.insert(cmds, "buy deagle")
+                elseif sec == "Dual Berettas" then
+                    table.insert(cmds, "buy elite")
+                elseif sec == "FN57 / Tec9 / CZ75-Auto" then
+                    table.insert(cmds, "buy fn57")
+                end
+            end
+            
+            if utility["Kevlar"] then table.insert(cmds, "buy vest") end
+            if utility["Helmet"] then table.insert(cmds, "buy vesthelm") end
+            if utility["Defuse Kit"] then table.insert(cmds, "buy defuser") end
+            if utility["Taser"] then table.insert(cmds, "buy taser") end
+            if utility["Smoke"] then table.insert(cmds, "buy smokegrenade") end
+            if utility["Molotov"] then
+                table.insert(cmds, "buy molotov; buy incgrenade")
+            end
+            if utility["Grenade"] then table.insert(cmds, "buy hegrenade") end
+            
+            local full_cmd = table.concat(cmds, "; ")
+            client.exec(full_cmd)
+        end
+        
+        client.set_event_callback("player_spawn", buy.handle)
+        
+        menu.checkbox(groups.antiaim)("Auto-Buy")("visuals", "autobuy", ts.is_buymenu)
+        menu.combobox(groups.antiaim)("Primary", primary_opts)("visuals", "primary", function() return ts.is_buymenu() and menu.elements["visuals"]["autobuy"] end)
+        menu.combobox(groups.antiaim)("Secondary", secondary_opts)("visuals", "secondary", function() return ts.is_buymenu() and menu.elements["visuals"]["autobuy"] end)
+        menu.multiselect(groups.antiaim)("Gear", gear_opts)("visuals", "utility", function() return ts.is_buymenu() and menu.elements["visuals"]["autobuy"] end)
+    end
+end
+
 local indicators = {}
 do
     indicators.accent = {}
