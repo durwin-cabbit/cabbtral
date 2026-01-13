@@ -2,6 +2,67 @@ local panorama_api = panorama.open()
 
 local DEBUG = true
 
+package.preload["surface"] = function()
+do
+    surface = { }
+
+    local wide = ffi.new 'int[1]'
+    local tall = ffi.new 'int[1]'
+
+    local SetColor = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 15, 'void(__thiscall*)(void* thisptr, int r, int g, int b, int a)')
+
+    local SetTextFont = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 23, 'void(__thiscall*)(void*, unsigned int font_id)')
+    local SetTextColor = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 25, 'void(__thiscall*)(void*, int r, int g, int b, int a)')
+    local SetTextPos = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 26, 'void(__thiscall*)(void*, int x, int y)')
+    local DrawPrintText = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 28, 'void(__thiscall*)(void*, const wchar_t *text, int maxlen, int draw_type)')
+
+    local GetFontTall = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 74, 'int(__thiscall*)(void*, unsigned int font)')
+    local GetTextSize = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 79, 'void(__thiscall*)(void*, unsigned int font, const wchar_t *text, int &wide, int &tall)')
+
+    local DrawFilledRectFade = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 123, 'void(__thiscall*)(void*, int x0, int y0, int x1, int y1, unsigned int alpha0, unsigned int alpha1, bool bHorizontal)')
+
+    function surface.text_tall(font)
+        return GetFontTall(font)
+    end
+
+    function surface.measure_text(font, text)
+        local buffer = ffi.new 'wchar_t[2048]'
+
+        ilocalize.ansi_to_unicode(text, buffer, 2048)
+        GetTextSize(font, buffer, wide, tall)
+
+        return wide[0], tall[0]
+    end
+
+    function surface.text(font, x, y, r, g, b, a, text)
+        local len = #text
+
+        if len <= 0 then
+            return
+        end
+
+        local buffer = ffi.new 'wchar_t[2048]'
+
+        ilocalize.ansi_to_unicode(text, buffer, 2048)
+
+        SetTextFont(font)
+
+        SetTextPos(x, y)
+        SetTextColor(r, g, b, a)
+
+        DrawPrintText(buffer, len, 0)
+    end
+
+    function surface.fade(x, y, w, h, r0, g0, b0, a0, r1, g1, b1, a1, horizontal)
+        SetColor(r0, g0, b0, a0)
+        DrawFilledRectFade(x, y, x + w, y + h, 255, 0, horizontal)
+
+        SetColor(r1, g1, b1, a1)
+        DrawFilledRectFade(x, y, x + w, y + h, 0, 255, horizontal)
+    end
+end
+end
+
 -- #region : Libraries
 package.preload["helpers"] = function()
     local http = require("gamesense/http")
@@ -181,80 +242,6 @@ local sc = vector(client.screen_size())
 math.randomseed(globals.realtime() * 1000)
 
 pui.accent = "A6CAFFFF"
-
-
-local surface do
-    surface = { }
-
-    local wide = ffi.new 'int[1]'
-    local tall = ffi.new 'int[1]'
-
-    local SetColor = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 15, 'void(__thiscall*)(void* thisptr, int r, int g, int b, int a)')
-
-    local SetTextFont = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 23, 'void(__thiscall*)(void*, unsigned int font_id)')
-    local SetTextColor = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 25, 'void(__thiscall*)(void*, int r, int g, int b, int a)')
-    local SetTextPos = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 26, 'void(__thiscall*)(void*, int x, int y)')
-    local DrawPrintText = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 28, 'void(__thiscall*)(void*, const wchar_t *text, int maxlen, int draw_type)')
-
-    local GetFontTall = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 74, 'int(__thiscall*)(void*, unsigned int font)')
-    local GetTextSize = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 79, 'void(__thiscall*)(void*, unsigned int font, const wchar_t *text, int &wide, int &tall)')
-
-    local DrawFilledRectFade = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 123, 'void(__thiscall*)(void*, int x0, int y0, int x1, int y1, unsigned int alpha0, unsigned int alpha1, bool bHorizontal)')
-
-    function surface.text_tall(font)
-        return GetFontTall(font)
-    end
-
-    function surface.measure_text(font, text)
-        local buffer = ffi.new 'wchar_t[2048]'
-
-        ilocalize.ansi_to_unicode(text, buffer, 2048)
-        GetTextSize(font, buffer, wide, tall)
-
-        return wide[0], tall[0]
-    end
-
-    function surface.text(font, x, y, r, g, b, a, text)
-        local len = #text
-
-        if len <= 0 then
-            return
-        end
-
-        local buffer = ffi.new 'wchar_t[2048]'
-
-        ilocalize.ansi_to_unicode(text, buffer, 2048)
-
-        SetTextFont(font)
-
-        SetTextPos(x, y)
-        SetTextColor(r, g, b, a)
-
-        DrawPrintText(buffer, len, 0)
-    end
-
-    function surface.fade(x, y, w, h, r0, g0, b0, a0, r1, g1, b1, a1, horizontal)
-        SetColor(r0, g0, b0, a0)
-        DrawFilledRectFade(x, y, x + w, y + h, 255, 0, horizontal)
-
-        SetColor(r1, g1, b1, a1)
-        DrawFilledRectFade(x, y, x + w, y + h, 0, 255, horizontal)
-    end
-end
-
-        local cabbit_png = "https://github.com/durwin-cabbit/cabbtral/blob/main/cabbitlol.png?raw=true"
-
-        local cabbit_texture_id = nil
-
-        http.get(cabbit_png, function(status, response)
-            if status and response.body and response.headers["Content-Type"] == "image/png" then
-                local tid = renderer.load_png(response.body, 48, 48)
-                if tid and tid > 0 then
-                    cabbit_texture_id = tid
-                end
-            end
-        end)
-
 
 -- #region : lua data
 local cabbtral = {}
@@ -1165,7 +1152,6 @@ local drag = {
                         local scr_w, scr_h = client.screen_size()
 
                         local guide_y = scr_h - 40 - (h_w / 2)
-
                     end
                 end
 
@@ -2480,6 +2466,13 @@ do
     )
 
     menu.checkbox(groups.other)("\vdebug info\r")("main", "debug", function()
+            return menu.elements["main"]["tab_selector"] == 11
+        end
+    )
+
+    menu.button(groups.other)("\vFps fix", function()
+        client.exec("clear_anim_chace;clear_bombs;clear_debug_overlays;logaddress_add 1") end)
+        ("main", "fpsfix", function()
             return menu.elements["main"]["tab_selector"] == 11
         end
     )
@@ -5405,6 +5398,11 @@ end
             local screen_width, screen_height = client.screen_size()
 
             local master = menu.elements["visuals"]["debug_panel"]
+
+            if not master then 
+                return
+            end
+
             local x, y = debug_drag:drag(90, 52, 200, 60)
 
             if master then
@@ -5623,6 +5621,10 @@ do
     end
 
 
+    local watermark_drag = drag.new("watermark", 10, 40)
+
+    local watermark_old_drag = drag.new("watermark_old", 10, 40)
+
     indicators.watermark = {}
     do
         local watermark = indicators.watermark
@@ -5643,144 +5645,83 @@ do
                 return "c-d"
             elseif mode == "Bold" then
                 return "cdb"
+            elseif mode == "Big" then
+                return "c+d"
             else
                 return "cd"
             end
         end
 
-        watermark.handle = function()
-            local pos = vector(client.screen_size())
-            local switch = menu.elements["visuals"]["watermarkswitch"]
 
-            local display_text = menu.refs["visuals"]["watermark_old_text"]:get()
-            if display_text == "" then
-                display_text = "cabbtral.fun"
-            end
-            local cabbit = renderer.load_png(cabbit_png, 70, 70)
-            local w, h = 180, 28
-            local x, y = client.screen_size()
+watermark.handle = function()
+    local pos = vector(client.screen_size())
+    local colortext = menu.elements["visuals"]["accent_color"]:to_hex()
 
-            local gradient_text = render.gradient_text(
-                display_text,
-                globals.realtime(),
-                pui.macros.accent.r,
-                pui.macros.accent.g,
-                pui.macros.accent.b,
-                155,
-                155,
-                155,
-                155,
-                155
-            )
+    local switch = menu.elements["visuals"]["watermarkswitch"]
 
-            local xsc, ysc = client.screen_size()
+    local text = string.format(
+        "\v\a%s   cabbtral %s \\ \aFFFFFFFF %s \r",
+        colortext,
+        current_build,
+        cabbtral.user
+    )
 
-            local w, h = renderer.measure_text(display_text, get_font_flags())
-            
-            local xc = xsc / 2 - 50
-            local yc = ysc - h - 10
+    if switch then 
+        return 
+    end
 
-            local colortext = menu.elements["visuals"]["accent_color"]:to_hex()
-            local text = string.format("\v\a%s   cabbtral %s \\ \aFFFFFFFF %s \r", colortext, current_build, cabbtral.user)
+    local xnew, ynew = watermark_drag:drag(100, 16, 10, 60)
 
-            local text_length = renderer.measure_text(text, "b")
+    renderer.text(
+        xnew,
+        ynew,
+        255, 255, 255, 255,
+        "b",
+        nil,
+        text
+    )
+end
 
-            local xa = renderer.measure_text()
-            local ya = ysc / 2
+watermark.old_handle = function()
+    local switch = menu.elements["visuals"]["watermarkswitch"]
+    local display_text = menu.refs["visuals"]["watermark_old_text"]:get()
+    if display_text == "" then
+        display_text = "cabbtral.fun"
+    end
 
-            if switch then
-                local r1, g1, b1, a1 =
-                    menu.refs["visuals"]["accent_color"]:get()
-                local r2, g2, b2, a2 =
-                    menu.refs["visuals"]["watermark_gradient_color"]:get()
-                local speed =
-                    menu.elements["visuals"]["watermark_gradient_speed"]
-                local clock = globals.curtime() * speed
-                local gradient_text = render.gradient_text(
-                    display_text,
-                    clock,
-                    r1,
-                    g1,
-                    b1,
-                    a1,
-                    r2,
-                    g2,
-                    b2,
-                    a2
-                )
-                local font = get_font_flags()
-                render.text(
-                    xc + 50,
-                    yc + 10,
-                    color(255),
-                    font,
-                    nil,
-                    watermark.fn(gradient_text)
-                )
-            else
-                renderer.text(
-                    xa,
-                    ya,
-                    255, 255, 255, 255,
-                    "b",
-                    nil,
-                    text
-                )
-            end
-            --[[ elseif style == "New" then
+    if not switch then 
+        return 
+    end
 
-                local additive = menu.elements["visuals"]["watermark_font"]
-                            == "Default"
-                        and 3
-                    or 0
-                local colornew = menu.elements["visuals"]["accent_color"]:to_hex()
-                local user_text = string.format("\aFFFFFFFFcabbtral.\a%sfun", colornew)
-                local font = get_font_flags()
-                local xnew = xsc - 10
-                local ynew = 1
-                render.text(
-                    55,
-                    y/2 + 10,
-                    color(255),
-                    "d",
-                    nil,
-                    watermark.fn(user_text)
-                )
-                local name = string.format("user: %s",cabbtral.user)
-                render.text(
-                    55,
-                    y/2 + 22,
-                    color(255),
-                    "d",
-                    nil,
-                    name
-                )
-                local build = string.format("build: %s",current_build)
-                render.text(
-                    55,
-                    y/2 + 34,
-                    color(255),
-                    "d",
-                    nil,
-                    build
-                )
-                if cabbit_texture_id then
-                    renderer.texture(
-                        cabbit_texture_id,
-                        1,
-                        y / 2,
-                        50,
-                        50,
-                        255,
-                        255,
-                        255,
-                        255
-                    )
-                end
-            end --]]
-        end
+    local xold, yold = watermark_old_drag:drag(40, 20, 200, 60)
 
+    local r1, g1, b1, a1 =
+        menu.refs["visuals"]["accent_color"]:get()
+    local r2, g2, b2, a2 =
+        menu.refs["visuals"]["watermark_gradient_color"]:get()
 
+    local speed =
+        menu.elements["visuals"]["watermark_gradient_speed"]
+    local clock = globals.curtime() * speed
+
+    local gradient_text = render.gradient_text(
+        display_text,
+        clock,
+        r1, g1, b1, a1,
+        r2, g2, b2, a2
+    )
+
+    local font = get_font_flags()
+
+    render.text(
+        xold + 20,
+        yold + 10,
+        color(255),
+        font,
+        nil,
+        watermark.fn(gradient_text)
+    )
+end
 
         --menu.label(groups.antiaim)("\v•\r  Watermark")("main", "watermarklabel", ts.is_indicators)
 
@@ -5788,7 +5729,7 @@ do
 
         menu.combobox(groups.antiaim)(
             "\nwatermark_font",
-            { "Default", "Pixel", "Bold" }
+            { "Default", "Pixel", "Bold", "Big" }
         )("visuals", "watermark_font", function()
             return ts.is_indicators() and menu.elements["visuals"]["watermarkswitch"]
         end)
@@ -5819,8 +5760,17 @@ do
                     and menu.elements["visuals"]["watermarkswitch"]
             end
         )
+        menu.combobox(groups.antiaim)("\nwatermark_old_pos", { "bottom center", "upper right", "upper left", "center left", "center right" } )(
+            "visuals",
+            "Watermark_old_pos",
+            function()
+                return ts.is_indicators()
+                    and menu.elements["visuals"]["watermarkswitch"]
+            end
+        )
 
         events.paint_ui:set(watermark.handle)
+        events.paint_ui:set(watermark.old_handle)
     end
 
     indicators.crosshair = {}
