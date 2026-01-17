@@ -9,6 +9,9 @@ do
     local wide = ffi.new 'int[1]'
     local tall = ffi.new 'int[1]'
 
+    -- reuse a single wchar buffer to avoid allocating every draw call
+    local shared_wchar_buffer = ffi.new 'wchar_t[2048]'
+
     local SetColor = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 15, 'void(__thiscall*)(void* thisptr, int r, int g, int b, int a)')
 
     local SetTextFont = vtable_bind('vguimatsurface.dll', 'VGUI_Surface031', 23, 'void(__thiscall*)(void*, unsigned int font_id)')
@@ -26,10 +29,9 @@ do
     end
 
     function surface.measure_text(font, text)
-        local buffer = ffi.new 'wchar_t[2048]'
 
-        ilocalize.ansi_to_unicode(text, buffer, 2048)
-        GetTextSize(font, buffer, wide, tall)
+        ilocalize.ansi_to_unicode(text, shared_wchar_buffer, 2048)
+        GetTextSize(font, shared_wchar_buffer, wide, tall)
 
         return wide[0], tall[0]
     end
@@ -41,16 +43,14 @@ do
             return
         end
 
-        local buffer = ffi.new 'wchar_t[2048]'
-
-        ilocalize.ansi_to_unicode(text, buffer, 2048)
+        ilocalize.ansi_to_unicode(text, shared_wchar_buffer, 2048)
 
         SetTextFont(font)
 
         SetTextPos(x, y)
         SetTextColor(r, g, b, a)
 
-        DrawPrintText(buffer, len, 0)
+        DrawPrintText(shared_wchar_buffer, len, 0)
     end
 
     function surface.fade(x, y, w, h, r0, g0, b0, a0, r1, g1, b1, a1, horizontal)
@@ -64,165 +64,7 @@ end
 end
 
 -- #region : Libraries
-package.preload["helpers"] = function()
-    local http = require("gamesense/http")
-    local bit = require("bit")
-    local helpers = {}
-    helpers.download_file = function(link,name)
-        if not readfile(name) then
-            http.get(link, function(success, response)
-                if not success or response.status ~= 200 then 
-                print("couldnt fetch the file") 
-                return 
-            end 
-            writefile(name, response.body) 
-            print(name .. " has been downloaded")
-        end)
-        end
-    end
-    helpers.rgba_to_hex = function(r, g, b, a)
-            return string.format("%02X%02X%02X%02X", r, g, b, a)
-    end
-    helpers.xor_str = function(str, key)
-        local out = {}
-        for i = 1, #str do
-            local c = string.byte(str, i)
-            out[i] = string.char(bit.bxor(c, key))
-        end
-        return table.concat(out)
-    end
 
-    helpers.urlencode = function(str)
-        return str:gsub("([^%w%-_%.~])", function(c)
-            return string.format("%%%02X", string.byte(c))
-        end)
-    end
-    helpers.unix_to_utc = function(unix)
-        local days_in_month = {
-            31, 28, 31, 30, 31, 30,
-            31, 31, 30, 31, 30, 31
-        }
-
-        local function is_leap(year)
-            return (year % 4 == 0 and year % 100 ~= 0) or (year % 400 == 0)
-        end
-
-        local sec = unix % 60
-        local min = math.floor(unix / 60) % 60
-        local hour = math.floor(unix / 3600) % 24
-        local days = math.floor(unix / 86400)
-
-        local year = 1970
-        while true do
-            local leap = is_leap(year) and 366 or 365
-            if days >= leap then
-                days = days - leap
-                year = year + 1
-            else
-                break
-            end
-        end
-
-        local month = 1
-        while true do
-            local dim = days_in_month[month]
-            if month == 2 and is_leap(year) then
-                dim = 29
-            end
-            if days >= dim then
-                days = days - dim
-                month = month + 1
-            else
-                break
-            end
-        end
-
-        local day = days + 1
-
-        return year, month, day, hour, min, sec
-    end
-
-    function helpers.vec_3( _x, _y, _z ) 
-        return { x = _x or 0, y = _y or 0, z = _z or 0 } 
-    end
-
-    function helpers.ticks_to_time()
-        return globals.tickinterval( ) * 16
-    end 
-
-    function helpers.player_will_peek( )
-        local enemies = entity.get_players( true )
-        if not enemies then
-            return false
-        end
-        
-        local eye_position = helpers.vec_3( client.eye_position( ) )
-        local velocity_prop_local = helpers.vec_3( entity.get_prop( entity.get_local_player( ), "m_vecVelocity" ) )
-        local predicted_eye_position = helpers.vec_3( eye_position.x + velocity_prop_local.x * helpers.ticks_to_time( predicted ), eye_position.y + velocity_prop_local.y * helpers.ticks_to_time( predicted ), eye_position.z + velocity_prop_local.z * helpers.ticks_to_time( predicted ) )
-
-        for i = 1, #enemies do
-            local player = enemies[ i ]
-            
-            local velocity_prop = helpers.vec_3( entity.get_prop( player, "m_vecVelocity" ) )
-            local origin = helpers.vec_3( entity.get_prop( player, "m_vecOrigin" ) )
-            local predicted_origin = helpers.vec_3( origin.x + velocity_prop.x * helpers.ticks_to_time(), origin.y + velocity_prop.y * helpers.ticks_to_time(), origin.z + velocity_prop.z * helpers.ticks_to_time() )
-            entity.get_prop( player, "m_vecOrigin", predicted_origin )
-            local head_origin = helpers.vec_3( entity.hitbox_position( player, 0 ) )
-            local predicted_head_origin = helpers.vec_3( head_origin.x + velocity_prop.x * helpers.ticks_to_time(), head_origin.y + velocity_prop.y * helpers.ticks_to_time(), head_origin.z + velocity_prop.z * helpers.ticks_to_time() )
-            local trace_entity, damage = client.trace_bullet( entity.get_local_player( ), predicted_eye_position.x, predicted_eye_position.y, predicted_eye_position.z, predicted_head_origin.x, predicted_head_origin.y, predicted_head_origin.z )
-            entity.get_prop( player, "m_vecOrigin", origin )
-            if damage > 0 then
-                return true
-            end
-        end
-        
-        return false
-    end
-
-    helpers.get_desync = function ()
-        if not entity.get_local_player() then return 0 end
-        return (math.floor(math.abs(entity.get_prop(entity.get_local_player(), "m_flPoseParameter", 11) * 120)) - 60)
-    end
-
-    helpers.get_side = function ()
-        return (math.floor(math.abs(entity.get_prop(entity.get_local_player(), "m_flPoseParameter", 11) * 120)) - 60) > 0 and 1 or -1
-    end
-
-    helpers.time_to_ticks = function(t)
-        return math.floor(0.5 + (t / globals.tickinterval()))
-    end
-    local Verbs = {
-        ground_ticks = 0,
-        end_time = 0,
-    }
-    helpers.in_air = function()
-        local local_player = entity.get_local_player()
-        if local_player == nil then return end
-
-        local flags = entity.get_prop(local_player, "m_fFlags")
-        local on_ground = bit.band(flags, 1) == 1
-
-        if on_ground then
-            Verbs.ground_ticks = Verbs.ground_ticks + 1
-        else
-            Verbs.ground_ticks = 0
-            Verbs.end_time = globals.curtime() + 1
-        end
-
-        return Verbs.ground_ticks > 1 and Verbs.end_time > globals.curtime() and not client.key_state(0x20)
-    end
-    local bind_mode  = { "always on", "holding", "toggled", "off hotkey" }
-    helpers.get_key_mode = function (ref) -- not working yet but im working on it
-        local key = { ref:get() }
-        local mode = key[2] 
-        if mode == nil then
-            return "nil"
-        end
-        return bind_mode[mode + 1]
-    end
-    --print(Cheat.References.Ragebot.Aimbot.Weapon_config.Exploits.doubletap[1].hotkey.type)
-    return helpers
-end
 
 local pui = require("gamesense/pui")
 local csgo_weapons = require("gamesense/csgo_weapons")
@@ -235,6 +77,17 @@ local vector = require("vector")
 local localize = require 'gamesense/localize'
 local c_entity = require 'gamesense/entity'
 local antiaim_funcs = require'gamesense/antiaim_funcs'
+local _renderer = renderer
+local _entity = entity
+local _client = client
+local _globals = globals
+local _ui = ui
+local _ffi = ffi
+local _math = math
+local _string = string
+local _table = table
+local _vector = vector
+local _pui = pui
 
 -- #endregion
 
@@ -1014,6 +867,8 @@ end
 -- #endregion
 
 -- #region : drag
+local pui_drags = {}
+
 local drag = {
     new = function(name, base_x, base_y)
         return (function()
@@ -1037,30 +892,45 @@ local drag = {
                 uii = false,
             }
 
-            local p = {
-                __index = {
-                    drag = function(self, ...)
-                        local q, r = self:get()
-                        local s, t = a.drag(self, q, r, ...)
-                        if q ~= s or r ~= t then
-                            self:set(s, t)
-                        end
-                        return s, t
-                    end,
-                    set = function(self, q, r)
-                        local j, k = client.screen_size()
-                        ui.set(self.x_reference, q / j * self.res)
-                        ui.set(self.y_reference, r / k * self.res)
-                    end,
-                    get = function(self, x333, y333)
-                        local j, k = client.screen_size()
-                        return ui.get(self.x_reference) / self.res * j
-                            + (x333 or 0),
-                            ui.get(self.y_reference) / self.res * k
-                                + (y333 or 0)
-                    end,
-                },
+local p = {
+    __index = {
+        drag = function(self, ...)
+            local q, r = self:get()
+            local s, t = a.drag(self, q, r, ...)
+            if q ~= s or r ~= t then
+                self:set(s, t)
+            end
+            return s, t
+        end,
+
+        set = function(self, q, r)
+            local j, k = client.screen_size()
+            ui.set(self.x_reference, q / j * self.res)
+            ui.set(self.y_reference, r / k * self.res)
+        end,
+
+        get = function(self, x333, y333)
+            local j, k = client.screen_size()
+            return
+                ui.get(self.x_reference) / self.res * j + (x333 or 0),
+                ui.get(self.y_reference) / self.res * k + (y333 or 0)
+        end,
+
+        pui_export = function(self)
+            local x, y = self:get()
+            return {
+                name = self.name,
+                x = x,
+                y = y
             }
+        end,
+
+        pui_import = function(self, data)
+            if not data then return end
+            self:set(data.x, data.y)
+        end
+    }
+}
 
             function a.new(u, v, w, x)
                 x = x or 10000
@@ -1068,7 +938,7 @@ local drag = {
                 local y = ui.new_slider(
                     "aa",
                     "anti-aimbot angles",
-                    "ender::x:" .. u,
+                    "cabbtral::x:" .. u,
                     0,
                     x,
                     v / j * x
@@ -1076,7 +946,7 @@ local drag = {
                 local z = ui.new_slider(
                     "aa",
                     "anti-aimbot angles",
-                    "ender::y:" .. u,
+                    "cabbtral::y:" .. u,
                     0,
                     x,
                     w / k * x
@@ -1643,6 +1513,34 @@ function utils.random_int(min, max)
     return client.random_int(min, max)
 end
 
+function utils.draw_animated_text(text, block_size)
+    -- persistent frame counter
+    utils.draw_animated_text.frame =
+        (utils.draw_animated_text.frame or 0) + 1
+
+    local len = #text
+    local pos = len - (utils.draw_animated_text.frame % len)
+
+    local out = {}
+
+    for i = 1, len do
+        local is_block = false
+
+        -- block wrap check
+        for b = 0, block_size - 1 do
+            if i == ((pos + b - 1) % len) + 1 then
+                is_block = true
+                break
+            end
+        end
+
+        out[i] = is_block and "4" or "-"
+    end
+
+    return table.concat(out)
+end
+
+
 
 function utils.from_hex(hex)
         hex = string.gsub(hex, '#', '')
@@ -2119,16 +2017,11 @@ local my = {
     },
 }
 do
-    events.paint_ui:set(function()
-        my.entity = entity.get_local_player()
-        my.valid = my.entity and entity.is_alive(my.entity)
-    end)
 
     my.update_netvars = function(cmd)
         my.entity = entity.get_local_player()
         my.valid = my.entity and entity.is_alive(my.entity)
         my.command_number = cmd.command_number
-
         if my.valid then
             local velocity = vector(entity.get_prop(my.entity, "m_vecVelocity"))
             my.velocity = velocity:length2d()
@@ -2456,14 +2349,9 @@ do
         "info_header"
     )
 
-        menu.label(groups.antiaim)("\226\128\142")("main", "blank69420")
-
-    menu.label(groups.antiaim)("Test build by \vreset\r")(
-        "main",
-        "info_header1"
-    )
-
-    menu.label(groups.antiaim)("\226\128\142")("main", "blank4167")
+    menu.label(groups.antiaim)("\226\128\142")("main", "blank69420")
+	
+    --menu.label(groups.antiaim)("\226\128\142")("main", "blank4167")
     
     menu.label(groups.fakelag)(("Welcome back, \v%s\r"):format(cabbtral.user))(
         "main",
@@ -2976,6 +2864,9 @@ local notify = (function()
 
     NotificationSystem.__index = NotificationSystem
 
+    -- throttle handler to reduce per-frame cost
+    local _last_notify_time = 0
+
     function NotificationSystem.new_preview(r, g, b, ...)
         table.insert(NotificationSystem.preview_notifications, {
             instance = setmetatable({
@@ -3150,6 +3041,13 @@ local notify = (function()
 
     function NotificationSystem:handler()
         local menu_open = ui.is_menu_open()
+
+        -- only run full handler at ~60/ (0.06s) frequency unless menu preview is active
+        local now = globals.realtime()
+        if not menu_open and #self.preview_notifications == 0 and now - _last_notify_time < 0.06 then
+            return
+        end
+        _last_notify_time = now
 
         if menu_open and #self.preview_notifications > 0 then
             for i = #self.notifications.bottom, 1, -1 do
@@ -3506,6 +3404,30 @@ antiaim.antibrute = {
         end)
 
     end --]]
+
+    antiaim.unmatched = {}
+    do
+        local unmatched = antiaim.unmatched
+
+        unmatched.handle = function()
+            if not menu.elements["antiaim"]["unmatched"] then
+                return
+            end
+
+            if menu.refs["antiaim"]["disabledef"]:get() or menu.elements["antiaim"]["disable"] then
+                exploit.defensive = false
+            end
+        end
+
+        menu.checkbox(groups.antiaim)("\vUnmatched\r Features")("antiaim", "unmatched", ts.is_antiaim)
+        menu.checkbox(groups.antiaim)("Disable \vDefensive")("antiaim", "disable", function() return ts.is_antiaim() and menu.elements["antiaim"]["unmatched"] end)
+        menu.hotkey(groups.antiaim)("Hotkey")("antiaim", "disabledef", function() return ts.is_antiaim() and menu.elements["antiaim"]["unmatched"] end)
+
+        client.set_event_callback("predict_command", function()
+            unmatched.handle()
+        end)
+
+    end
 
     antiaim.on_use = {}
     do
@@ -5388,6 +5310,7 @@ end
         end
 
         local debug_drag = drag.new("debug_panel", 50, 350)
+		pui_drags[#pui_drags + 1] = debug_drag
 
         local function debug_panel_handle()
             local main_text = "CABBITOOLS.FUN"
@@ -5618,10 +5541,19 @@ do
     end
 
     local window_watermark_drag = drag.new("window_watermark_drag", 10, 40)
+	pui_drags[#pui_drags + 1] = window_watermark_drag
 
     local window_spec_drag = drag.new("window_spec_drag", 10, 40)
+	pui_drags[#pui_drags + 1] = window_spec_drag
 
     local window_key_drag = drag.new("window_key_drag", 10, 40)
+	pui_drags[#pui_drags + 1] = window_key_drag
+	
+	local window_multi_drag = drag.new("window_multi_drag", 10, 40)
+	pui_drags[#pui_drags + 1] = window_multi_drag
+
+	local window_debug_drag = drag.new("window_debug_drag", 10, 40)
+	pui_drags[#pui_drags + 1] = window_debug_drag
 
     indicators.windows = {}
     do
@@ -6018,8 +5950,19 @@ windows.keybinds:create(
     end
 )
 
+windows.keybinds:create(
+    "Di$sable defensive",
+    function()
+        return menu.elements["antiaim"]["unmatched"] and menu.refs["antiaim"]["disabledef"]:get()
+    end
+)
+
 windows.key_handle = function()
     local master = menu.elements["visuals"]["widgets"]
+	local lp = entity.get_local_player()
+    if not lp or not entity.is_alive(lp) then
+        return
+    end
     if not master["Keybinds"] then
         return
     end
@@ -6142,17 +6085,227 @@ renderer.gradient(
     end
 end
 
+local vel_history = {}
+local def_history = {}
+local def_smooth = 0
+local MAX_POINTS = 20
+
+windows.multi_handle = function()
+    local master = menu.elements["visuals"]["widgets"]
+	local lp = entity.get_local_player()
+    if not lp or not entity.is_alive(lp) then
+        return
+    end
+	local value = entity.get_prop(lp, "m_flVelocityModifier") or nil
+	local raw = exploit.diff
+	if value == nil then return end
+    if not master["Multipanel"] then
+        return
+    end
+
+    local r,g,b,a = menu.refs["visuals"]["accent_color"]:get()
+
+    local sc = vector(client.screen_size())
+    local x, y = window_multi_drag:drag(85, 110, 10, 40)
+    local panel_w, panel_h = 80, 110
+
+    -- background
+	renderer.rectangle(
+        x - 5, y - 5,
+        panel_w + 10, panel_h + 10,
+        40, 40, 40, 240
+    )
+    renderer.rectangle(
+        x - 3, y - 3,
+        panel_w + 6, panel_h + 6,
+        10, 10, 10, 240
+    )
+	
+	renderer.gradient(
+        x - 3, y - 3,
+        panel_w + 6, panel_h / 3,
+		40, 40, 40, 240,
+        10, 10, 10, 240,
+		false
+    )
+    renderer.text(
+        x + 20,
+        y + 53,
+        220, 220, 220, 240,
+        "b",
+        nil,
+        "velocity"
+    )
+	
+	local graph_x = x + 14
+    local graph_y = y + 28 + 45
+    local graph_ydef = y + 28
+    local graph_w = panel_w - 28
+    local graph_h = 60
+	
+	renderer.rectangle(
+        x + 11, y + 17 + 52,
+        graph_w + 6, graph_h / 2,
+        30, 30, 30, 240
+    )
+
+    local reduction = 1 - value -- 0 → 1
+
+    table.insert(vel_history, reduction)
+    if #vel_history > MAX_POINTS then
+        table.remove(vel_history, 1)
+    end
+
+    for i = 2, #vel_history do
+        local v1 = math.min(vel_history[i - 1], 1)
+		local v2 = math.min(vel_history[i], 1)
+
+        local px1 = graph_x + ((i - 2) / (MAX_POINTS - 1)) * graph_w
+        local py1 = graph_y + v1 * graph_h / 2.2
+
+        local px2 = graph_x + ((i - 1) / (MAX_POINTS - 1)) * graph_w
+        local py2 = graph_y + v2 * graph_h / 2.2
+
+        renderer.line(
+            px1, py1,
+            px2, py2,
+            r, g, b, 255
+        )
+    end
+
+if raw == nil then
+    raw = 0
+end
+
+raw = -raw
+
+local target = raw / 16
+
+if target < 0 then target = 0 end
+if target > 1 then target = 1 end
+
+def_smooth = def_smooth + (target - def_smooth) * 0.2
+
+local defensive = def_smooth
+
+table.insert(def_history, defensive)
+if #def_history > MAX_POINTS then
+    table.remove(def_history, 1)
+end
+
+    renderer.text(
+        x + 15,
+        graph_ydef - 27,
+        220, 220, 220, 240,
+        "b",
+        nil,
+        "defensive"
+    )
+
+renderer.rectangle(
+    x + 11, graph_ydef- 10,
+    graph_w + 6, graph_h / 2,
+    30, 30, 30, 240
+)
+for i = 2, #def_history do
+    local v1 = def_history[i - 1]
+    local v2 = def_history[i]
+
+    local px1 = graph_x + ((i - 2) / (MAX_POINTS - 1)) * graph_w
+    local py1 = graph_ydef + v1 * graph_h / 2.2
+
+    local px2 = graph_x + ((i - 1) / (MAX_POINTS - 1)) * graph_w
+    local py2 = graph_ydef + v2 * graph_h / 2.2
+
+    renderer.line(
+        px1, py1,
+        px2, py2,
+        r, g, b, 255
+    )
+end
+end
+
+windows.debug_handle = function()
+	local master = menu.elements["visuals"]["widgets"]
+	if not master["Debug panel"] then
+		return
+	end
+	local lp = entity.get_local_player()
+    if not lp or not entity.is_alive(lp) then
+        return
+    end
+	
+	local yaw_offset = refs.antiaim.yaw_offset:get()
+	local pitch_offset = refs.antiaim.pitch_offset:get()
+	local yaw_jitter = refs.antiaim.yaw_jitter:get()
+	local yaw_jitter_offset = refs.antiaim.yaw_jitter_offset:get()
+	local body_yaw = refs.antiaim.body_yaw:get()
+	local body_yaw_offset = refs.antiaim.body_yaw_offset:get()
+	local fakelag_limit = refs.antiaim.fakelag_limit:get()
+	local side
+    if antiaim.data.inverter then
+        side = "R"
+    else
+        side = "L"
+    end
+	local label = string.format("%s debug panel", cabbtral.name)
+	local yaw_text = string.format("yaw: %s", yaw_offset)
+	local pitch_text = string.format("pitch: %s", pitch_offset)
+	local yaw_jitter_text = string.format("jitter mode: %s", yaw_jitter)
+	local yaw_jitter_off_text = string.format("jitter offset: %s", yaw_jitter_offset)
+	local body_yaw_text = string.format("body yaw mode: %s", body_yaw)
+	local body_yaw_off_text = string.format("body yaw: %s", body_yaw_offset)
+	local fakelag_limit_text = string.format("fakelag: %s", fakelag_limit)
+	local side_text = string.format("side: %s", side)
+
+	
+	local sc = vector(client.screen_size())
+	
+	local label_w, label_h = renderer.measure_text("b", label)
+	
+	local x, y = window_debug_drag:drag(label_w,95, 10, 40)
+	
+	local r,g,b,a = menu.refs["visuals"]["accent_color"]:get()
+	
+	renderer.text(
+		x,y,r,g,b,a,"b",nil,label
+	)
+	renderer.text(
+		x,y+ 13,255,255,255,255,"",nil,pitch_text
+	)
+	renderer.text(
+		x,y+ 26,255,255,255,255,"",nil,yaw_text
+	)
+	renderer.text(
+		x,y+ 39,255,255,255,255,"",nil,body_yaw_text
+	)
+	renderer.text(
+		x,y+ 52,255,255,255,255,"",nil,body_yaw_off_text
+	)
+	renderer.text(
+		x,y+ 65,255,255,255,255,"",nil,side_text
+	)
+	renderer.text(
+		x,y+ 78,255,255,255,255,"",nil,fakelag_limit_text
+	)
+	
+end
+
+
         events.paint_ui:set(function()
             windows.watermark_handle()
             windows.spec_handle()
             windows.key_handle()
+            windows.multi_handle()
+			windows.debug_handle()
         end)
 
-        menu.multiselect(groups.other)("Wigdets", { "Watermark", "Keybinds", "Spectators" })("visuals", "widgets", ts.is_indicators)
+        menu.multiselect(groups.other)("Wigdets", { "Watermark", "Keybinds", "Spectators", "Multipanel", "Debug panel" })("visuals", "widgets", ts.is_indicators)
     end
 
 
     local watermark_old_drag = drag.new("watermark_old", 10, 40)
+	pui_drags[#pui_drags + 1] = watermark_old_drag
 
     indicators.watermark = {}
     do
@@ -7356,20 +7509,20 @@ logs.aim_hit = function(shot, e)
 
             if preview.type == "kill" then
                 msg = string.format(
-                    "Killed %s in %s",
+                    "killed %s in %s",
                     preview.name,
                     preview.hitbox
                 )
             elseif preview.type == "hit" then
                 msg = string.format(
-                    "Hit %s in %s for %s damage",
+                    "hit %s in %s for %s damage",
                     preview.name,
                     preview.hitbox,
                     preview.damage
                 )
             elseif preview.type == "miss" then
                 msg = string.format(
-                    "Missed %s in %s due to %s",
+                    "missed %s in %s due to %s",
                     preview.name,
                     preview.hitbox,
                     preview.reason
@@ -7436,7 +7589,7 @@ logs.aim_hit = function(shot, e)
         events.aim_miss(logs.aim_miss, enabled)
     end, true)
 
-            indicators.slowed_down = {}
+            --[[indicators.slowed_down = {}
         do
             local slowed = indicators.slowed_down
             slowed.anim = 0
@@ -7575,7 +7728,7 @@ logs.aim_hit = function(shot, e)
             menu.refs["visuals"]["slowed_down"]:set_callback(function(self)
                 events.paint_ui(slowed.handle, self:get())
             end, true)
-        end
+        end--]]
 
 end
 
@@ -8262,7 +8415,7 @@ end
         end)
     end
 
-    miscellaneous.dzik_pickup = {}
+    --[[miscellaneous.dzik_pickup = {}
     do
 
 local TARGET_MODEL = "dzik_puszka_v3"
@@ -8319,7 +8472,7 @@ end)
     --menu.checkbox(groups.antiaim)("Auto use \vdziks\r on \vuwujka\r")("visuals", "dzik", ts.is_misc)
     --menu.hotkey(groups.antiaim)("Hotkey")("visuals", "hotkey", function() return ts.is_misc() and menu.elements["visuals"]["dzik"] end)
 
-    end
+    end--]]
 
     miscellaneous.bullet_tracer = {}
     do
@@ -8595,11 +8748,63 @@ end
 end
 
 
+local dragstosave = function()
+    local t = {}
+
+    for _, d in ipairs(pui_drags) do
+        t[d.name] = {
+            x = ui.get(ui.reference(
+                "aa", "anti-aimbot angles", "cabbtral::x:" .. d.name
+            )),
+            y = ui.get(ui.reference(
+                "aa", "anti-aimbot angles", "cabbtral::y:" .. d.name
+            ))
+        }
+    end
+
+    return t
+end
+
 -- #region : Update pui.setup
 configs.data = pui.setup(
-    { antiaim = menu.refs["antiaim"], visuals = menu.refs["visuals"] },
+    {
+        antiaim = menu.refs["antiaim"],
+        visuals = menu.refs["visuals"],
+    },
     true
 )
+
+
+local function save_drags_to_pui()
+    local out = {}
+
+    for _, d in ipairs(pui_drags) do
+        local x_ref = ui.reference(
+            "aa",
+            "anti-aimbot angles",
+            "cabbtral::x:" .. d.name
+        )
+
+        local y_ref = ui.reference(
+            "aa",
+            "anti-aimbot angles",
+            "cabbtral::y:" .. d.name
+        )
+
+        out[#out + 1] = {
+            name = d.name,
+            x = ui.get(x_ref),
+            y = ui.get(y_ref)
+        }
+    end
+
+    configs.data.drag = out
+end
+
+client.set_event_callback("paint_ui", save_drags_to_pui)
+
+
+
 -- #endregion
 
 -- #region : Update Database
