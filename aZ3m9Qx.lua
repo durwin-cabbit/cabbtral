@@ -1955,7 +1955,31 @@ end)
 
 end
 -- #endregion
+
 -- #region : Refs
+
+local function safe_ref(...)
+    local ok, a, b, c = pcall(pui.reference, ...)
+    if not ok then
+        return nil
+    end
+    return a, b, c
+end
+
+local function safe_pui_ref(...)
+    local ok, ref = pcall(pui.reference, ...)
+    if ok then return ref end
+    return nil
+end
+
+local function safe_reference(fn, ...)
+    local ok, a, b, c = pcall(fn, ...)
+    if not ok then
+        return nil
+    end
+    return a, b, c
+end
+
 local refs = {
     antiaim = {
         antiaim_enabled = pui.reference("AA", "Anti-Aimbot angles", "Enabled"),
@@ -2049,13 +2073,13 @@ local refs = {
         lp_chams = {
             pui.reference("VISUALS", "Colored models", "Local player"),
         },
-        thirdperson = {
-            pui.reference("VISUALS", "Effects", "Force third person (alive)"),
-        },
+        weaponview_color = pui.reference("VISUALS", "Colored models", "Weapon viewmodel"),
+        thirdperson = pui.reference("VISUALS", "Effects", "Force third person (alive)"),
         hitchance = ui.reference("RAGE", "Aimbot", "Minimum hit chance"),
         ping_spike = pui.reference("MISC", "Miscellaneous", "Ping spike"),
         _, ping_spike_value = pui.reference("MISC", "Miscellaneous", "Ping spike"),
-        weapon_type = ui.reference("RAGE", "Weapon type", "Weapon type")
+        weapon_type = ui.reference("RAGE", "Weapon type", "Weapon type"),
+        hitchanceovr = safe_pui_ref("RAGE", "Other", "Hit chance override"),
     },
 }
 -- #endregion
@@ -2375,8 +2399,8 @@ local tabs = {
     {
         'Other', {
             'Indicators',
+            'Visuals',
             'Miscellaneous',
-            'Other'
         }
     },
 
@@ -2514,11 +2538,11 @@ do
     end
 
     ts.is_misc = function()
-        return menu.elements["main"]["tab_selector"] == 8
+        return menu.elements["main"]["tab_selector"] == 9
     end
 
     ts.is_other = function()
-        return menu.elements["main"]["tab_selector"] == 9
+        return menu.elements["main"]["tab_selector"] == 8
     end
 end
 
@@ -2946,7 +2970,7 @@ local notify = (function()
 
     local NotificationSystem = {
         notifications = { bottom = {} },
-        max = { bottom = 6 },
+        max = { bottom = 10 },
         preview_notifications = {},
     }
 
@@ -3004,12 +3028,12 @@ local notify = (function()
         local margin = 6
         local padding = 5
         local spacing = 5
-        local rounding = 4
+        local rounding = 1
         local frame_time = globals.frametime()
 
         local text_content = self:get_text()
         local text_size = measure_text("", text_content)
-        local cabbtral_size = measure_text("b", "Ω")
+        local cabbtral_size = measure_text("", "cabbtral.fun")
 
         local visual_width =
             math.max(80, margin + cabbtral_size.x + 10 + text_size.x)
@@ -3056,18 +3080,6 @@ local notify = (function()
         local r, g, b, a =
             self.color.r, self.color.g, self.color.b, self.color.a
 
-        renderer.circle(
-            x + 4 + rounding,
-            y + rounding,
-            10,
-            10,
-            10,
-            90,
-            rounding,
-            180,
-            0.25,
-            self.anim
-        )
         renderer.rectangle(
             x + 4 + rounding,
             y,
@@ -3076,20 +3088,7 @@ local notify = (function()
             10,
             10,
             10,
-            90,
-            a
-        )
-        renderer.circle(
-            x + 4 + visual_width - rounding,
-            y + rounding,
-            10,
-            10,
-            10,
-            90,
-            rounding,
-            90,
-            0.25,
-            self.anim
+            240
         )
         renderer.rectangle(
             x + 4,
@@ -3099,20 +3098,7 @@ local notify = (function()
             10,
             10,
             10,
-            90,
-            a
-        )
-        renderer.circle(
-            x + 4 + rounding,
-            y + visual_height - rounding,
-            10,
-            10,
-            10,
-            90,
-            rounding,
-            270,
-            0.25,
-            self.anim
+            240
         )
         renderer.rectangle(
             x + 4 + rounding,
@@ -3122,32 +3108,32 @@ local notify = (function()
             10,
             10,
             10,
-            90,
-            a
+            240
         )
-        renderer.circle(
-            x + 4 + visual_width - rounding,
-            y + visual_height - rounding,
+        renderer.gradient(
+            x + 3 + rounding,
+            y,
+            visual_width - rounding - rounding + 2,
+            10,
+            70,
+            70,
+            70,
+            240,
             10,
             10,
             10,
-            90,
-            rounding,
-            0,
-            0.25,
-            self.anim
+            240,
+            false
         )
 
         renderer.text(
             x + padding + 5,
             y + visual_height / 2 - cabbtral_size.y / 2,
-            r,
-            g,
-            b,
+            150, 150, 204,
             a,
-            "b",
+            "",
             nil,
-            "Ω"
+            "cabbtral.fun"
         )
         renderer.text(
             x + padding + cabbtral_size.x + 10,
@@ -5819,7 +5805,7 @@ windows.spec_handle = function()
 
     local spectators = get_spectator_names()
     if #spectators == 0 then
-        return
+        spectators = { "Nobody" }
     end
 
     local padding_x, padding_y = 20, 8
@@ -5958,6 +5944,17 @@ windows.keybinds:create(
     end
 )
 
+if refs.other.hitchance1 then
+
+windows.keybinds:create(
+    "Hitchance override",
+    function()
+        return refs.other.hitchance1:get()
+    end
+)
+
+end
+
 windows.keybinds:create(
     "Ping spike",
     function()
@@ -6030,7 +6027,7 @@ windows.key_handle = function()
     local r,g,b,a = menu.refs["visuals"]["accent_color"]:get()
 
     local sc = vector(client.screen_size())
-    local x, y = window_key_drag:drag(50, 30, 10, 40)
+    local x, y = window_key_drag:drag(90, 60, 10, 40)
 
     local line_h = 14
     local title_gap = 10
@@ -6063,8 +6060,8 @@ windows.key_handle = function()
     local draw_h = windows.keybinds.anim_h
 
 
-    local box_x = x - draw_w / 2
-    local box_y = y - line_h - padding_y - 4
+    local box_x = x - draw_w / 2 + 45
+    local box_y = y - line_h - padding_y - 4 + 40
 
     renderer.rectangle(
         box_x-3,
@@ -6084,21 +6081,19 @@ windows.key_handle = function()
 
     renderer.gradient(box_x, box_y, draw_w, title_gap*2, 40, 40, 40, 240, 10, 10, 10, 240, false)
 
-
-
     local title = "keybinds"
     local title_w = renderer.measure_text("b", title)
 
     renderer.text(
-        x - title_w / 2,
-        y - line_h*1.4,
+        x - title_w / 2 + 45,
+        y - line_h*1.4 + 40,
         255, 255, 255, 255,
         "b",
         0,
         title
     )
 
-local grad_y = y + 1
+local grad_y = y + 40
 local grad_w = draw_w * 0.5
 
 local grad_left_x  = box_x
@@ -6134,8 +6129,8 @@ renderer.gradient(
             local tw = renderer.measure_text("", text)
 
             renderer.text(
-                x - tw / 2,
-                y,
+                x - tw / 2 + 45,
+                y+ 40,
                 255, 255, 255, item.alpha,
                 "",
                 0,
@@ -6198,7 +6193,7 @@ watermark.handle = function()
     if master["Watermark"] then return end
 
     local text = string.format(
-        "\v\a%s   cabbtral %s \\ \aFFFFFFFF %s \r",
+        "\v\a%s   cabbtral %s \\ \aFFFFFFFF %s \r",
         colortext,
         current_build,
         cabbtral.user
@@ -6384,8 +6379,49 @@ end
 
             paint = function(self, position, flags, fn)
                 local rg, gg, bg = menu.refs["visuals"]["crosshairg_color"]:get()
+                local r,g,b,a = menu.refs["visuals"]["accent_color"]:get()
 
-                local namem = string.format("%s %s", cabbtral.name, current_build)
+                local namem = string.format("%s", current_build)
+                --local namem = string.format("%s", cabbtral.name)
+                local name = string.lower(namem)
+
+                local text =fn(render.gradient_text(
+                        name,
+                        globals.realtime(),
+                        r,
+                        g,
+                        b,
+                        self.alpha,
+                        r,
+                        g,
+                        b,
+                        self.alpha
+                    ))
+                local size = render.measure_text(flags, text)
+                if self.alpha > 0 then
+                    render.text(
+                        position.x - self.size,
+                        position.y,
+                        pui.macros.accent:alpha_modulate(self.alpha),
+                        flags,
+                        nil,
+                        text
+                    )
+                end
+
+                return { size = size }
+            end,
+        })
+
+        crosshair:create({
+            get = function()
+                return true
+            end,
+
+            paint = function(self, position, flags, fn)
+                local rg, gg, bg = menu.refs["visuals"]["crosshairg_color"]:get()
+
+                local namem = string.format("%s.fun", cabbtral.name)
                 --local namem = string.format("%s", cabbtral.name)
 
                 local text = fn(
@@ -7419,7 +7455,7 @@ logs.aim_hit = function(shot, e)
 
                 local sw, sh = client.screen_size()
 
-                local visual_width, visual_height = 120, 20
+                local visual_width, visual_height = 80, 20
                 local center_x = sw * 0.5 - visual_width * 0.5
                 local center_y = sh * 0.5 - 325 - visual_height * 0.5
 
@@ -7454,79 +7490,53 @@ logs.aim_hit = function(shot, e)
                         menu.refs["visuals"]["slowed_down_style"]:get()
                         == "Modern"
                     then
-                        k.glow_module_notify(
-                            pos_x + 15,
-                            pos_y + 7,
-                            90,
-                            25,
-                            12,
-                            8,
-                            10,
-                            10,
-                            10,
-                            90,
-                            255,
-                            255,
-                            255,
-                            200,
-                            true,
-                            8
+
+                        local max_width = 80
+
+                        local gradient_wl = max_width --* reduction / 100
+
+                        renderer.rectangle(
+                            pos_x + visual_width * 0.5 - 57,
+                            pos_y + visual_height * 0.5 - 2,
+                            84, 34,
+                            30, 30, 30, 240
                         )
-                        k.glow_module_notify(
-                            pos_x - 25,
-                            pos_y + 7,
-                            27,
-                            25,
-                            12,
-                            8,
-                            10,
-                            10,
-                            10,
-                            90,
-                            255,
-                            255,
-                            255,
-                            200,
-                            true,
-                            8
+                        renderer.rectangle(
+                            pos_x + visual_width * 0.5 - 55,
+                            pos_y + visual_height * 0.5,
+                            80, 30,
+                            10, 10, 10, 240
                         )
+                        renderer.gradient(
+                            pos_x + visual_width * 0.5 - 55,
+                            pos_y + visual_height * 0.5,
+                            80, 10,
+                            30, 30, 30, 240, 
+                            10, 10, 10, 240, false
+                        )
+                        rendere:rect(
+                            pos_x + visual_width * 0.5- 55,
+                            pos_y + visual_height * 0.5 + 27,
+                            gradient_wl, 3,
+                            --70, 70, 70, 240,
+                            { 220, 220, 220, 240 },
+                            2
+                        )
+
+                        local alph = 240 * reduction / 100
+
                         renderer.text(
                             pos_x + visual_width * 0.5 - 15,
-                            pos_y + visual_height * 0.5 + 10,
-                            200,
-                            200,
-                            200,
-                            255,
-                            "c",
+                            pos_y + visual_height * 0.5 + 13,
+                            220, 220, 220, 240,
+                            "cb",
                             0,
                             "velocity"
-                        )
-                        renderer.text(
-                            pos_x + visual_width * 0.515 + 21,
-                            pos_y + visual_height * 0.5 + 10,
-                            200,
-                            200,
-                            200,
-                            255,
-                            "c",
-                            0,
-                            string.format("%.0f%%", reduction)
-                        )
-                        renderer.text(
-                            pos_x + visual_width * 0.5 - 72,
-                            pos_y + visual_height * 0.5 + 10,
-                            200,
-                            200,
-                            200,
-                            255,
-                            "c",
-                            0,
-                            "⚠"
                         )
                     elseif
                         menu.refs["visuals"]["slowed_down_style"]:get()
                         == "Simple"
-                    then -- Added 'then' here
+                    then
                         renderer.text(
                             pos_x + visual_width * 0.515 - 17,
                             pos_y + visual_height * 0.5 + 7,
@@ -7940,6 +7950,13 @@ end
 local miscellaneous = {}
 do
 
+    miscellaneous.features = {}
+    do
+        local featurs = miscellaneous.features
+
+        menu.multiselect(groups.antiaim)("Features", { "Clan tag", "Trash talk", "Disable weapon in 3rd person", "Console cleaner", "Console filter", "Taser warning" })("visuals", "features", ts.is_misc)
+    end
+
     miscellaneous.fast_ladder = {}
     do
         local fast_ladder = miscellaneous.fast_ladder
@@ -7971,8 +7988,6 @@ do
             cmd.in_back = side and 0 or 1
         end
 
-        menu.label(groups.antiaim)("\v --- \r Miscellaneous \v --- \r")("visuals", "misc_label", ts.is_misc)
-
         menu.checkbox(groups.antiaim)("Fast Ladder")(
             "visuals",
             "fast_ladder",
@@ -7984,6 +7999,53 @@ do
         end, true)
     end
 
+miscellaneous.weapon_render = {}
+do
+    local weapon_render = miscellaneous.weapon_render
+    
+    local cached_color = nil 
+    local was_thirdperson = false
+
+    weapon_render.handle = function()
+        local master = menu.elements["visuals"]["features"]
+        if not master["Disable weapon in 3rd person"] then 
+            return 
+        end
+
+        local is_thirdperson = refs.other.thirdperson:get_hotkey()
+
+        if is_thirdperson then
+            if not was_thirdperson then
+                local r, g, b, a = refs.other.weaponview_color:get_color()
+                cached_color = {r, g, b, a} 
+                was_thirdperson = true
+            end
+
+            refs.other.weaponview_color:override(true)
+            refs.other.weaponview_color:set_color(255, 255, 255, 0)
+        else
+            if was_thirdperson then
+                refs.other.weaponview_color:override()
+                
+                if cached_color then
+                    refs.other.weaponview_color:set_color(
+                        cached_color[1], 
+                        cached_color[2], 
+                        cached_color[3], 
+                        cached_color[4]
+                    )
+                end
+                was_thirdperson = false
+            end
+        end
+    end
+
+    client.set_event_callback("paint", function()
+        weapon_render.handle()
+    end)
+
+        --menu.checkbox(groups.antiaim)("Disable weapon in 3rd person")("visuals", "render", ts.is_misc)
+end
     miscellaneous.clantag = {}
     do
         local clantag = miscellaneous.clantag
@@ -8039,20 +8101,17 @@ do
             clantag.set(clantag.tag[iter])
         end
 
-        menu.checkbox(groups.antiaim)("Clan Tag")(
+        --[[menu.checkbox(groups.antiaim)("Clan Tag")(
             "visuals",
             "clantag",
             ts.is_misc
-        )
+        )--]]
 
-        menu.refs["visuals"]["clantag"]:set_callback(function(self)
-            if not self:get() then
-                clantag.set()
-            end
+        client.set_event_callback("shutdown", function() if menu.elements["visuals"]["features"]["Clan tag"] then clantag.set() end end)
+        client.set_event_callback("net_update_end", function() if menu.elements["visuals"]["features"]["Clan tag"] then clantag.handle() end end)
 
-            events.shutdown(clantag.set, self:get())
-            events.net_update_end(clantag.handle, self:get())
-        end, true)
+        --events.shutdown(clantag.set, function() return menu.elements["visuals"]["features"]["Clan tag"] end)
+        --events.net_update_end(clantag.handle, function() return menu.elements["visuals"]["features"]["Clan tag"] end)
     end
 
     miscellaneous.trashtalk = {}
@@ -8117,7 +8176,7 @@ client.set_event_callback("player_death", function(e)
     local modes = menu.elements["visuals"]["trashtalktype"]
 
     if attacker == me and victim ~= me then
-        if menu.elements["visuals"]["trashtalk"] then
+        if menu.elements["visuals"]["features"]["Trash talk"] then
         if menu.elements["visuals"]["trashtalktype"]["Kill"] then
             local list = trashtalk.kill
             local pick = list[client.random_int(1, #list)]
@@ -8128,7 +8187,7 @@ client.set_event_callback("player_death", function(e)
     end
 
     if victim == me and attacker ~= me then
-        if menu.elements["visuals"]["trashtalk"] then
+        if menu.elements["visuals"]["features"]["Trash talk"] then
         if menu.elements["visuals"]["trashtalktype"]["Death"] then
             local list = trashtalk.death
             local pick = list[client.random_int(1, #list)]
@@ -8138,13 +8197,13 @@ client.set_event_callback("player_death", function(e)
     end
 end)
 
-        menu.checkbox(groups.antiaim)("Trashtalk")(
+        --[[menu.checkbox(groups.antiaim)("Trashtalk")(
             "visuals",
             "trashtalk",
             ts.is_misc
-        )
+        )--]]
 
-        menu.multiselect(groups.antiaim)("Trashtalk type", {"Kill", "Death"})("visuals", "trashtalktype", function() return ts.is_misc() and menu.elements["visuals"]["trashtalk"] end)
+        menu.multiselect(groups.antiaim)("Trashtalk type", {"Kill", "Death"})("visuals", "trashtalktype", function() return ts.is_misc() and menu.elements["visuals"]["features"]["Trash talk"] end)
 
 
     miscellaneous.menu = {}
@@ -8157,6 +8216,50 @@ end)
             --render.rectangle(0, 0, screen.x, screen.y, color(15):alpha_modulate(menu.anim), 0)
         end
         events.paint_ui(menu.handle, true)
+    end
+
+    miscellaneous.taser_warn = {}
+    do
+        local taser_warn = miscellaneous.taser_warn
+
+ local visuals = menu.elements["visuals"]["features"]
+local get_weapon = entity.get_player_weapon
+local get_classname = entity.get_classname
+local w2s = renderer.world_to_screen
+
+taser_warn.handle = function()
+    if not visuals["Taser warning"] then return end
+    if not my.valid then return end
+
+    local enemy = client.current_threat()
+    if not enemy then return end
+
+    local ox, oy, oz = entity.get_origin(enemy)
+    local sx, sy = w2s(ox, oy, oz)
+    if not sx or not sy then return end
+
+    local weapon = get_weapon(enemy)
+    if not weapon then return end
+    if get_classname(weapon) ~= "CWeaponTaser" then return end
+
+    local x, y = entity.get_bounding_box(enemy)
+    if not x or not y then return end
+
+    renderer.circle_outline(x, y, 204, 51, 0, 255, 13, 5, 5, 13)
+    renderer.circle_outline(x, y, 204, 51, 0, 200, 15, 5, 5, 15)
+    renderer.circle_outline(x, y, 204, 51, 0, 150, 17, 5, 5, 17)
+    renderer.circle_outline(x, y, 204, 51, 0, 100, 20, 5, 5, 20)
+
+    renderer.rectangle(x - 4, y - 13, 4, 20, 128, 0, 0, 255)
+    renderer.rectangle(x - 4, y + 10, 4, 4, 128, 0, 0, 255)
+end
+
+
+        client.set_event_callback("paint_ui", function()
+            if menu.elements["visuals"]["features"]["Taser warning"] then
+                taser_warn.handle()
+            end
+        end)
     end
 
     miscellaneous.dzik_pickup = {}
@@ -8274,14 +8377,16 @@ end)
         console.handle = function()
             cvar.clear:invoke_callback()
         end
-        menu.checkbox(groups.antiaim)("Console cleaner")(
-            "visuals",
-            "console",
-            ts.is_misc
-        )
-        menu.refs["visuals"]["console"]:set_callback(function(self)
+        --menu.checkbox(groups.antiaim)("Console cleaner")(
+           -- "visuals",
+           -- "console",
+           -- ts.is_misc
+        --)
+        --[[menu.refs["visuals"]["console"]:set_callback(function(self)
             events.round_prestart(console.handle, self:get())
-        end, true)
+        end, true)--]]
+
+        client.set_event_callback("round_prestart", function() if menu.elements["visuals"]["features"]["Console cleaner"] then console.handle() end end)
     end
     miscellaneous.filter = {}
     do
@@ -8296,18 +8401,20 @@ end)
             client.exec("con_filter_enable 0")
         end
 
-        menu.checkbox(groups.antiaim)("Console filter")(
-            "visuals",
-            "filter",
-            ts.is_misc
-        )
-        menu.refs["visuals"]["filter"]:set_callback(function(self)
-            if self:get() then
+        --menu.checkbox(groups.antiaim)("Console filter")(
+        --    "visuals",
+         --   "filter",
+         --   ts.is_misc
+        --)
+        --[[menu.refs["visuals"]["features"]["Console filter"]:set_callback(function(self)
+            if self then
                 filter.enable()
             else
                 filter.disable()
             end
-        end, true)
+        end, true)--]]
+
+        client.set_event_callback("paint", function() if menu.elements["visuals"]["features"]["Console filter"] then filter.enable() else filter.disable() end end)
 
         events.shutdown(filter.disable)
     end
